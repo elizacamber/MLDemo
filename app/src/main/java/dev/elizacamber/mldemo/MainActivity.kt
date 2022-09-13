@@ -1,6 +1,7 @@
 package dev.elizacamber.mldemo
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.os.Build
@@ -16,6 +17,9 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.label.ImageLabeling
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import dev.elizacamber.mldemo.databinding.ActivityMainBinding
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
@@ -23,7 +27,7 @@ import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-typealias LumaListener = (luma: Double) -> Unit
+typealias LabelsListener = (labels: String) -> Unit
 
 
 class MainActivity : AppCompatActivity() {
@@ -121,8 +125,8 @@ class MainActivity : AppCompatActivity() {
             val imageAnalyzer = ImageAnalysis.Builder()
                 .build()
                 .also {
-                    it.setAnalyzer(cameraExecutor, LuminosityAnalyzer { luma ->
-                        Log.d(TAG, "Average luminosity: $luma")
+                    it.setAnalyzer(cameraExecutor, LabelAnalyzer { label ->
+                        Log.d(TAG, "ML Analyzer: $label")
                     })
                 }
 
@@ -188,7 +192,7 @@ class MainActivity : AppCompatActivity() {
             }.toTypedArray()
     }
 
-    private class LuminosityAnalyzer(private val listener: LumaListener) : ImageAnalysis.Analyzer {
+    private class LabelAnalyzer(private val listener: LabelsListener) : ImageAnalysis.Analyzer {
 
         private fun ByteBuffer.toByteArray(): ByteArray {
             rewind()    // Rewind the buffer to zero
@@ -197,16 +201,51 @@ class MainActivity : AppCompatActivity() {
             return data // Return the byte array
         }
 
-        override fun analyze(image: ImageProxy) {
+        @SuppressLint("UnsafeOptInUsageError")
+        override fun analyze(imageProxy: ImageProxy) {
+//            val buffer = imageProxy.planes[0].buffer
+//            val data = buffer.toByteArray()
+//            val pixels = data.map { it.toInt() and 0xFF }
+//            val luma = pixels.average()
+//
+//            listener(luma)
+//
+//            imageProxy.close()
 
-            val buffer = image.planes[0].buffer
-            val data = buffer.toByteArray()
-            val pixels = data.map { it.toInt() and 0xFF }
-            val luma = pixels.average()
+            val mediaImage = imageProxy.image
+            if (mediaImage != null) {
+                val image =
+                    InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                // Pass image to an ML Kit Vision API
+                // First get an instance of the ImageLabeler
+                val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
 
-            listener(luma)
+                // Or, to set the minimum confidence required:
+                // val options = ImageLabelerOptions.Builder()
+                //     .setConfidenceThreshold(0.7f)
+                //     .build()
+                // val labeler = ImageLabeling.getClient(options)
 
-            image.close()
+                // Then, pass the image to the process() method
+
+                labeler.process(image)
+                    .addOnSuccessListener { labels ->
+                        // Task completed successfully
+                        for (label in labels) {
+                            val text = label.text
+                            val confidence = label.confidence
+                            val index = label.index
+
+                            listener("$text - $confidence")
+                            imageProxy.close()
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "analyze: ", e)
+                        // Task failed with an exception
+                        // ...
+                    }
+            }
         }
     }
 }

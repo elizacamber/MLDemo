@@ -32,6 +32,10 @@ android {
     buildFeatures {
         viewBinding true
     }
+    aaptOptions {
+        noCompress "tflite"
+        // or noCompress "lite"
+    }
 }
 
 dependencies {
@@ -50,6 +54,9 @@ dependencies {
     implementation "androidx.camera:camera-extensions:${camerax_version}"
 
     implementation 'com.google.mlkit:image-labeling:17.0.7'
+
+    // Image labeling with custom bundled model
+    implementation 'com.google.mlkit:image-labeling-custom:17.0.1'
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
